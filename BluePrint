@@ -1,0 +1,15 @@
+deployment-api/
+│
+├── app/
+│   ├── main.py → How the application starts
+│   ├── database.py → How to connect to the database
+│   ├── models.py → What tables exist
+│   ├── schemas.py → What data the API accepts and returns
+│   ├── crud.py → How the application starts
+│   └── routers/
+│       ├── projects.py
+│       ├── environments.py
+│       └── deployments.py
+│
+├── requirements.txt
+└── README.md

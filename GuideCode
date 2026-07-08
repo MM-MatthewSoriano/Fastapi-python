@@ -1,0 +1,719 @@
+from fastapi import FastAPI, status, HTTPException, Request, Depends, Header, UploadFile, File
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import JSONResponse
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
+from sqlalchemy import create_engine,Column,Integer,String
+from sqlalchemy.orm import sessionmaker, declarative_base, Session
+from jose import jwt, JWTError
+from fastapi.security import OAuth2PasswordBearer,OAuth2PasswordRequestForm
+from passlib.context import CryptContext
+from datetime import datetime, timedelta, timezone
+from dotenv import load_dotenv  
+from config import Settings
+from bs4 import BeautifulSoup
+from slowapi import Limiter
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
+import asyncio
+import time
+import sqlite3
+import os
+import shutil
+import requests
+import time
+
+app = FastAPI()
+# Tutorial #6
+# class User(BaseModel):
+#     name: str
+#     age: int
+#     email: str
+
+# # @app.post("/create-user")
+# # def create_user(user: User):
+# #     return {
+# #         "message": "User created successfully",
+# #         "user": user
+# #     }
+
+# @app.post("/create-user")
+# def create_user(user: User):
+#     return {
+#         "message": "User has been created",
+#         "data": user
+#     }
+
+
+# Tutorial #7
+# class Address(BaseModel):
+#     city: str
+#     postal_code: int
+
+# class User(BaseModel):
+#     name: str
+#     age: int
+#     address: Address
+
+# @app.post("/create-user")
+# def create_user(user: User):
+#     return user
+
+#Tutorial #8
+# todos = []
+
+# class Todo(BaseModel):
+#     id: int
+#     title: str
+#     completed: bool
+
+# @app.post("/todos")
+# def create_todo(todo: Todo):
+#     todos.append(todo)
+#     return {
+#         "message":"TODO created", 
+#         "data": todo
+#         }
+
+# @app.get("/todos")
+# def get_todos():
+#     return todos
+
+
+# @app.get("/todos/{todo_id}")
+# def get_todo(todo_id: int):
+#     for todo in todos:
+#         if todo.id == todo_id:
+#             return todo
+#     return {"error": "TODO not found"}
+
+# @app.put("/todos/{todo_id}")
+# def update_todo(todo_id: int, new_todo: Todo):
+#     for index, todo in enumerate(todos):
+#         if todo.id == todo_id:
+#             todos[index] = new_todo
+#             return {
+#                 "message": "Data Updated",
+#                 "data": new_todo
+#             }
+#     return {"error": "TODO not found"}
+
+# @app.delete("/todos/{todo_id}")
+# def delete_todo(todo_id: int):
+#     for index, todo in enumerate(todos):
+#         if todo.id == todo_id:
+#             todos.pop(index)
+#             return {"message": "TODO deleted"}
+#     return {"error": "TODO not found"}
+
+# Tutorial #9
+# users = []
+
+# class User(BaseModel):
+#     name: str
+#     age: int
+
+# @app.post("/users")
+# def create_user(user: User):
+#     users.append(user)
+#     return {
+#         "message": "User created",
+#         "data": user
+#     }
+
+# @app.put("/users/{user_id}")
+# def update_user(user_id: int, user: User, notify: bool = False):
+#     if user_id < len(users):
+#         users[user_id] = user
+#         return {
+#             "message": "User updated",
+#             "notify": notify,
+#             "data": user
+#         }
+#     return {
+#         "error": "User not found"
+#         }
+
+# Tutorial #10
+# class User(BaseModel):
+#     name: str
+#     age: int
+#     password: str
+
+# class UserResponse(BaseModel):
+#     name: str
+#     age: int
+
+# @app.get("/user", response_model=UserResponse)
+# def get_user():
+#     return {
+#         "name": "John Doe",
+#         "age": 30,
+#         "password": "12345"
+#     }
+
+# # Tutorial #11
+# @app.post("/create_user",status_code=status.HTTP_201_CREATED)
+# def create_user():
+#     return {
+#         "message": "User Created"
+#     }
+
+# @app.get("/user")
+# def get_user():
+#     return {
+#         "status": "success",
+#         "message": "user fetched",
+#         "data": {
+#             "name":"Mohit",
+#             "age": 30
+#         }
+#     }
+
+# @app.get("/users/{user_id}")
+# def get_users(user_id: int):
+#     if user_id != 1:
+#         raise HTTPException(
+#             status_code=404,
+#             detail="User not found"
+#         )
+    
+#     return {
+#         "id": 1,
+#         "name": "Mohit" 
+#     }
+
+# # Tutorial #12
+
+# class userNotFoundException(Exception):
+#     def __init__(self, name: str):
+#         self.name = name
+
+# @app.exception_handler(userNotFoundException)
+# def user_not_found_handler(request: Request, exc: userNotFoundException):
+#     return JSONResponse(
+#         status_code=404,
+#         content={
+#             "status":"error",
+#             "message": f"User {exc.name} not found"
+#         }
+#     )
+
+# @app.get ("/user/{name}")
+# def get_user(name: str):
+#     if name != "Luffy":
+#         raise userNotFoundException(name)
+#     return {
+#         "name": name
+#     }
+
+# # @app.get ("/users/{user_id}")
+# # def get_user(user_id: int):
+# #     if user_id != 1:
+# #         raise HTTPException(
+# #             status_code=404,
+# #             detail="User not found"
+# #         )
+
+# #     return {
+# #         "id": 1,
+# #         "name": "Luffy"
+# #     }
+
+# # Tutorial #13
+# def common_logic():
+#     return {
+#         "msg": "Common logic executed"
+#     }
+
+# @app.get("/home")
+# def home(data = Depends(common_logic)):
+#     return data
+
+# def get_current_user():
+#     return {
+#         "user": "luffy"
+#     }
+
+# @app.get("/profile")
+# def profile(user = Depends(get_current_user)):
+#     return user
+
+# @app.get("/dashboard")
+# def dashboard(user = Depends(get_current_user)):
+#     return user
+
+# def verify_token(token:str = Header(None)):
+#     if token != "mysecrettoken":
+#         raise HTTPException(
+#             status_code=401,
+#             detail="Invalid token"
+#         )
+#     return {
+#         "User":"Authorized User"
+#     }
+
+# @app.get("/secure-data")
+# def secure_data(user = Depends(verify_token)):
+#     return {
+#         "user": user,
+#         "msg": "Private data accessed"  
+#     }
+
+# Tutorial #14
+# @app.middleware("http")
+# async def my_middleware(request: Request, call_next):
+#     print("Request Received")
+
+#     response = await call_next(request)
+#     print("Response Sent")
+#     return response
+
+# @app.middleware("https")
+# async def log_middleware(request:Request,call_next):
+#     start_time = time.time()
+#     response = await call_next(request)
+#     process_time = time.time()-start_time
+#     print(f"Path: {request.url.path} | Time: {process_time}")
+#     return response
+
+# # Tutorial #15
+# conn = sqlite3.connect("test.db",check_same_thread=False)
+# cursor = conn.cursor()
+# cursor.execute("""
+# CREATE TABLE IF NOT EXISTS todos (
+#         id INTEGER PRIMARY KEY,
+#         title TEXT,
+#         completed TEXT
+#     )
+# """)
+
+# conn.commit()
+
+# @app.get("/")
+# def home():
+#     return {
+#         "message":"SQLITE connected"
+#     }
+
+# # Tutorial #16
+# DATABASE_URL = "sqlite:///./test.db"
+# engine = create_engine(
+#     DATABASE_URL,
+#     connect_args={"check_same_thread":False}
+# )
+
+# session_local = sessionmaker(bind=engine)
+
+# Base = declarative_base()
+
+# class Todo(Base):
+#     __tablename__ = "todos"
+#     id = Column(Integer,primary_key=True,index=True)
+#     title = Column(String)
+#     completed = Column(String)
+
+# Base.metadata.create_all(bind=engine)
+
+# def get_db():
+#     db = session_local()
+#     try:
+#         yield db
+#     finally:
+#         db.close()
+
+# # @app.get("/")
+# # def home(db: Session = Depends(get_db)):
+# #     return {
+# #         "message":"DB connected fine"
+# #     }
+
+# # Tutorial #17
+# @app.post("/todos")
+# def create_todo(title:str,db: Session = Depends(get_db)):
+#     todo = Todo(title=title,completed="False")
+#     db.add(todo)
+#     db.commit()
+#     db.refresh(todo)
+#     return {
+#         "message":"Todo Created",
+#         "data":todo
+#     }
+
+# # Tutorial #18
+# @app.get("/todos")
+# def get_todos(db:Session = Depends(get_db)):
+#     todos = db.query(Todo).all()
+
+#     return {
+#         "Total":len(todos),
+#         "data": todos
+#     }
+
+# @app.get("/todos/{todo_id}")
+# def get_todo(todo_id= int, db: Session = Depends(get_db)):
+#     todo = db.query(Todo).filter(Todo.id == todo_id).first()
+#     if not todo:
+#         raise HTTPException(status_code=404, detail="Todo not found")
+#     return todo
+
+# # Tutorial #19
+# @app.put("/todos/{todo_id}")
+# def update_todo(todo_id:int, title:str, db: Session = Depends(get_db)):
+#     todo = db.query(Todo).filter(Todo.id == todo_id).first()
+#     if not todo:
+#         raise HTTPException(status_code=404, detail="Todo not found")
+#     todo.title = title
+#     db.commit()
+#     db.refresh(todo)
+#     return {
+#         "message":"Todo updated",
+#         "data": todo
+#     }
+
+# # Tutorial #20
+# @app.delete("/todos/{todo_id}")
+# def delete_todo(todo_id:int,db: Session = Depends(get_db)):
+#     todo = db.query(Todo).filter(Todo.id == todo_id).first()
+#     if not todo:
+#         raise HTTPException(status_code=404, detail="Todo not found")
+#     db.delete(todo)
+#     db.commit()
+#     return {
+#         "message":"Deleted Todo",
+#         "data":todo
+#     }
+
+# # Tutorial #21
+# def task():
+#     time.sleep(3)
+#     return "Done"
+
+# async def task():
+#     await asyncio.sleep(3)
+#     return "Done"
+
+# @app.get("/")
+# async def home():
+#     await asyncio.sleep(3)
+#     return {
+#         "message":"ASYNC API"
+#     }
+
+# # Tutorial #22
+# SECRET_KEY = "niggasecret"
+# ALGORITHM = "HS256"
+# def create_token(data: dict):
+#     to_encode = data.copy()
+#     expire = datetime.now(timezone.utc) + timedelta(minutes=30)
+#     to_encode.update({
+#         "exp":expire
+#     })
+#     token = jwt.encode(to_encode,SECRET_KEY,algorithm=ALGORITHM)
+#     return token
+
+# @app.post("/login")
+# def login(username:str, password:str):
+#     if username != "admin" or password != "1234":
+#         raise HTTPException(
+#             status_code=401,
+#             detail="Invalid username or password"
+#         )
+#     token = create_token({
+#         "sub":username
+#     })
+#     return {
+#         "access_token": token
+#     }
+
+# def verify_token(token:str = Header(None)):
+#     try:
+#         payload = jwt.decode(token,SECRET_KEY,algorithms=[ALGORITHM])
+#         return payload
+#     except:
+#         raise HTTPException(
+#             status_code=401,
+#             detail="Invalid or Expired Token"
+#         )
+
+# @app.get("/secure")
+# def secure_data(user=Depends(verify_token)):
+#     return {
+#         "message":"Secure Data Accessed",
+#         "user":user
+#     }
+
+# # Tutorial #23
+# SECRET_KEY = "niggasecret"
+# ALGORITHM = "HS256"
+# ACCESS_TOKEN_EXPIRE_MINUTES=30
+
+# pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+# oauth2_schema = OAuth2PasswordBearer(tokenUrl="login")
+
+# fake_user_db = {
+#     "admin":{
+#         "username":"admin",
+#         "hashed_password":pwd_context.hash("1234")
+#     }
+# }
+
+# def hash_password(password:str):
+#     return pwd_context.hash(password)
+
+# def verify_password(plain_password,hashed_password):
+#     return pwd_context.verify(plain_password, hashed_password)
+
+# def create_token(data: dict):
+#     to_encode = data.copy()
+#     expire = datetime.now(timezone.utc) + timedelta(minutes=30)
+#     to_encode.update({
+#         "exp":expire
+#     })
+#     token = jwt.encode(to_encode,SECRET_KEY,algorithm=ALGORITHM)
+#     return token
+
+# @app.post("/login")
+# def login(form_data: OAuth2PasswordRequestForm = Depends()):
+#     user = fake_user_db.get(form_data.username)
+#     if not user or not verify_password(form_data.password,user["hashed_password"]):
+#         raise HTTPException(
+#             status_code=400,
+#             detail="Invalid username or password"
+#         )
+#     access_token = create_token({"sub":form_data.username})
+#     return {
+#         "access_token":access_token,
+#         "token_type":"bearer"
+#     }
+
+
+# def verify_token(token:str = Depends(oauth2_schema)):
+#     try:
+#         payload = jwt.decode(token,SECRET_KEY,algorithmsy=[ALGORITHM])
+#         username: str = payload.get("sub")
+#         if username is None:
+#             raise HTTPException (
+#                 status_code=401,
+#                 detail="Invalid Token"
+#             )
+#         return username
+#     except jwt.JWTError:
+#         raise HTTPException(
+#             status_code=401,
+#             detail="Invalid Token"
+#         )
+
+# @app.get("/protected")
+# def protected_route(username: str = Depends(verify_token)):
+#     return {
+#         "message":f"Hello {username}",
+#         "user":username
+#     }
+
+# # Tutorial #24
+# UPLOAD_DIR = "uploads"
+# if not os.path.exists(UPLOAD_DIR):
+#     os.makedirs(UPLOAD_DIR)
+
+# app.mount("/files",StaticFiles(directory=UPLOAD_DIR),name="files")
+
+# @app.post("/upload")
+# def upload_file(file:UploadFile = File(...)):
+#     filename = file.filename    
+#     file_path = os.path.join(UPLOAD_DIR,filename)
+
+#     if not filename:
+#         raise HTTPException(status_code=400, detail="File not selected")
+#     with open(file_path,"wb") as buffer:
+#         shutil.copyfileobj(file.file, buffer)
+#         return {
+#             "message":"File Uploaded Successfully",
+#             "filename":filename,
+#             "file_url":f"http://127.0.0.1:8000/files/{filename}"
+#         }
+    
+# @app.get("/files/{filename}")
+# def get_file(filename:str):
+#     file_path = os.path.join(UPLOAD_DIR,filename)
+#     if not os.path.exists(file_name):
+#         raise HTTPException(
+#             status_code=404,
+#             detail="File not found"
+#         )
+#     return {
+#         "file_url":f"http://127.0.0.1:8000/files/{filename}"
+#     }
+
+# @app.get("/")
+# def home():
+#     return {
+#         "message":"File upload api running"
+#     }
+
+# #Tutorial #25
+# origins = [
+#     "http://localhost:5173"
+# ]
+
+# app.add_middleware(
+#     CORSMiddleware,
+#     allow_origins=origins,
+#     allow_credentials=True, 
+#     allow_methods=["*"],
+#     allow_headers=["*"]
+# )
+
+# @app.get("/")
+# def home():
+#     return {
+#         "message":"CORS Enabled API",
+#     }
+
+# Tutorial #26
+# # load_dotenv()
+# origins = Settings.origins
+# # SECRET_KEY=os.getenv("SECRET_KEY")
+# # DB_URL=os.getenv("DB_URL")
+
+# app.add_middleware(
+#     CORSMiddleware,
+#     allow_origins=origins,
+#     allow_credentials=True, 
+#     allow_methods=["*"],
+#     allow_headers=["*"]
+# )
+
+# @app.get("/")
+# def home():
+#     return {
+#         "message":"CORS Enabled API",
+#     }
+
+# # Tutorial #27
+# @app.get("/")
+# def home():
+#     return {
+#         "message":"Walang kayo matt"
+#     }
+
+# @app.get("/add")
+# def add(a:int, b:int):
+#     return {
+#         "result":a+b
+#     }
+
+# # Tutorial #28
+# response =  requests.get("https://jsonplaceholder.typicode.com/posts/1")
+
+# data = response.json()
+# print(data[:2])
+
+# app = FastAPI()
+
+# @app.get("/posts")
+# def get_posts():
+#     url = "https://jsonplaceholder.typicode.com/posts"
+#     response = requests.get(url)
+#     return response.json()
+
+# @app.get("/posts/{post_id}")
+# def get_post(post_id:int):
+#     url = f"https://jsonplaceholder.typicode.com/posts/{post_id}"
+
+#     response = requests.get(url)
+
+#     if response.status_code != 200:
+#         raise HTTPException(
+#             status_code=404,detail="Page not found"
+#         )
+#     return response.json()
+
+
+# # Tutorial #29
+# url = ""
+# response = requests.get(url)
+# soup = BeautifulSoup(requests.text,"html.parse")
+# print(soup.title.text)
+
+# @app.get("/authors")
+# def get_authors():
+#     url = "https://quotes.toscrape.com/"
+#     response = requests.get(url)
+#     soup = BeautifulSoup(response.text, "html.parser")
+#     author = []
+#     for item in soup.find_all("small",class_="author"):
+#         author.append(item.text)
+#     return {
+#         "authors":author
+#     }
+
+# Tutorial #30
+# @app.get("/authors")
+# def get_authors(page:int=1,limit:int=5):
+#     url = "https://quotes.toscrape.com/"
+#     response = requests.get(url)
+#     soup = BeautifulSoup(response.text, "html.parser")
+#     author = []
+#     for item in soup.find_all("small",class_="author"):
+#         author.append(item.text)
+
+#     start = (page - 1) * limit
+#     end = start + limit
+#     return {
+#         "page": page,
+#         "limit": limit,
+#         "total":len(author),
+#         "data":author[start:end]
+#     }
+
+# # Tutorial #31
+# cache_data = []
+# last_fetch = 0
+
+# @app.get("/authors")
+# def get_authors():
+#     global cache_data, last_fetch
+
+#     start = time.time()
+#     if (time.time() - last_fetch) > 60:
+#         print("Fetching Fresh Data")
+#         url = "https://quotes.toscrape.com/"
+#         response = requests.get(url)
+#         soup = BeautifulSoup(response.text, "html.parser")
+#         cache_data = [
+#             item.text for item in soup.find_all("small",class_="author")
+#         ]
+#         last_fetch = time.time()
+#     else:
+#         print("Using Cache Data")
+    
+#     end = time.time()
+#     time_taken = round(end-start,4)
+#     print("Time Taken: ", time_taken)
+
+#     return {
+#         "time_taken":time_taken,
+#         "data":cache_data[:5]
+#     }
+
+# Tutorial #32
+limiter = Limiter(key_func=get_remote_address)
+app.state.limiter = limiter
+
+# @app.exception_handler(RateLimitExceeded)
+# def rate_limit_handler(request: Request, exc: RateLimitExceeded):
+#     return JSONResponse (
+#         status_code=429,
+#         content={
+#             "detail":"Too many requests"
+#         }
+#     )
+
+# @app.get("/data")
+# @limiter.limit("5/minute")
+# def get_data(request: Request):
+#     return {
+#         "message":"success"
+#     }
